@@ -3,6 +3,7 @@ import { generateQuestionsFromResume, evaluateAnswer, summarizeInterviewPerforma
 import ProctoringView from './ProctoringView';
 import { Spinner, RecordIcon, ThumbsUpIcon, LightbulbIcon } from './icons';
 import type { TerminationReason } from '../types';
+import Chart from 'chart.js/auto';
 
 type ProctoringStatus = 'pending' | 'ready' | 'error';
 type InterviewState = 'upload' | 'generating' | 'inProgress' | 'evaluating' | 'summarizing' | 'results';
@@ -47,6 +48,106 @@ const fileToDataUrl = (file: File): Promise<{base64: string, mimeType: string}> 
     reader.onerror = error => reject(error);
   });
 };
+
+const ResultsView: React.FC<{ 
+    results: InterviewResult[]; 
+    summary: PerformanceSummary | null;
+    onEndSession: () => void;
+}> = ({ results, summary, onEndSession }) => {
+    const totalScore = results.reduce((sum, result) => sum + result.score, 0);
+    const maxScore = results.length * 5;
+    const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+    const [openAccordion, setOpenAccordion] = useState<number | null>(null);
+    const doughnutChartRef = useRef<HTMLCanvasElement>(null);
+    const barChartRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        const textColor = theme === 'dark' ? '#cbd5e1' : '#475569';
+        const pointColor = theme === 'dark' ? '#f8fafc' : '#1e293b';
+
+        let doughnutChart: Chart | null = null;
+        if (doughnutChartRef.current) {
+            const percentageColor = percentage >= 70 ? '#22c55e' : percentage >= 40 ? '#f59e0b' : '#ef4444';
+            doughnutChart = new Chart(doughnutChartRef.current, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [percentage, 100 - percentage],
+                        backgroundColor: [percentageColor, theme === 'dark' ? '#334155' : '#e2e8f0'],
+                        borderColor: theme === 'dark' ? '#1e293b' : '#ffffff',
+                        borderWidth: 4,
+                        borderRadius: 8,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    cutout: '80%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false }
+                    },
+                    animation: {
+                        animateRotate: true,
+                        animateScale: true,
+                        duration: 1200
+                    }
+                }
+            });
+        }
+
+        let barChart: Chart | null = null;
+        if (barChartRef.current) {
+            barChart = new Chart(barChartRef.current, {
+                type: 'bar',
+                data: {
+                    labels: results.map((_, i) => `Q${i+1}`),
+                    datasets: [{
+                        label: 'Score',
+                        data: results.map(r => r.score),
+                        backgroundColor: results.map(r => r.score >= 4 ? 'rgba(34, 197, 94, 0.7)' : r.score === 3 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                        borderColor: results.map(r => r.score >= 4 ? '#16a34a' : r.score === 3 ? '#d97706' : '#dc2626'),
+                        borderWidth: 2,
+                        borderRadius: 6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true, max: 5, grid: { color: gridColor }, ticks: { color: textColor, stepSize: 1 }
+                        },
+                        x: {
+                            grid: { display: false }, ticks: { color: textColor }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                           backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+                           titleColor: textColor,
+                           bodyColor: textColor,
+                           borderColor: gridColor,
+                           borderWidth: 1,
+                        }
+                    }
+                }
+            });
+        }
+
+        return () => {
+            doughnutChart?.destroy();
+            barChart?.destroy();
+        };
+    }, [results, percentage]);
+    
+    const AccordionItem = ({ result, index, open, onToggle }: { result: InterviewResult, index: number, open: boolean, onToggle: () => void }) => ( <div className="bg-white/60 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700"><h2><button type="button" className="flex items-center justify-between w-full p-5 font-medium text-left text-slate-800 dark:text-white" onClick={onToggle} aria-expanded={open}><span className="flex items-center"><span className="font-bold mr-3">Q{index + 1}:</span><span className="truncate pr-4">{result.question}</span></span><div className="flex items-center"><span className={`mr-4 font-bold ${result.score >= 4 ? 'text-green-500' : result.score === 3 ? 'text-yellow-500' : 'text-red-500'}`}>{result.score}/5</span><svg className={`w-3 h-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5 5 1 1 5"/></svg></div></button></h2><div className={`${open ? '' : 'hidden'}`}><div className="p-5 border-t border-slate-200 dark:border-slate-700"><p className="text-sm text-slate-500 dark:text-slate-400 italic p-3 bg-slate-100 dark:bg-slate-900 rounded-md mb-3">Your answer: "{result.answer}"</p><div className="p-3 bg-indigo-500/10 dark:bg-indigo-400/10 rounded-md"><p className="font-semibold text-indigo-800 dark:text-indigo-300">Feedback:</p><p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">{result.feedback}</p></div></div></div></div>);
+
+    return (<div className="w-full max-w-5xl p-4 animate-fade-in-up"><h1 className="text-4xl font-bold text-center mb-8">Interview Performance</h1><div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8"><div className="lg:col-span-1 bg-white/60 dark:bg-slate-800/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center"><h2 className="text-xl font-bold mb-4">Overall Score</h2><div className="relative w-48 h-48"><canvas ref={doughnutChartRef}></canvas><div className="absolute inset-0 flex items-center justify-center text-4xl font-extrabold text-slate-800 dark:text-white">{percentage}%</div></div><p className="text-2xl font-bold mt-4 text-slate-700 dark:text-slate-300">{totalScore} / {maxScore}</p></div><div className="lg:col-span-2 bg-white/60 dark:bg-slate-800/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700"><h2 className="text-xl font-bold mb-4">AI Summary</h2><div className="space-y-4"><div className="flex items-start"><ThumbsUpIcon className="w-6 h-6 text-green-500 mr-3 mt-1 flex-shrink-0" /><div><h3 className="font-semibold text-slate-800 dark:text-white">Strengths</h3><p className="text-sm text-slate-600 dark:text-slate-300">{summary?.strengths}</p></div></div><div className="flex items-start"><LightbulbIcon className="w-6 h-6 text-yellow-500 mr-3 mt-1 flex-shrink-0" /><div><h3 className="font-semibold text-slate-800 dark:text-white">Areas for Improvement</h3><p className="text-sm text-slate-600 dark:text-slate-300">{summary?.areasForImprovement}</p></div></div></div></div></div><div className="bg-white/60 dark:bg-slate-800/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-8"><h2 className="text-xl font-bold mb-4">Score Breakdown</h2><div className="h-64"><canvas ref={barChartRef}></canvas></div></div><div><h2 className="text-2xl font-bold text-center mb-6">Detailed Feedback</h2><div className="space-y-2">{results.map((result, index) => (<AccordionItem key={index} result={result} index={index} open={openAccordion === index} onToggle={() => setOpenAccordion(openAccordion === index ? null : index)} />))}</div></div><div className="text-center mt-12"><button onClick={onEndSession} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-lg">Back to Dashboard</button></div></div>);
+};
+
 
 const ResumeInterviewPage: React.FC<{ 
   onTerminate: (reason: TerminationReason, message: string) => void;
@@ -281,10 +382,6 @@ const ResumeInterviewPage: React.FC<{
     </div>
   );
   
-  const AccordionItem = ({ result, index, open, onToggle }: { result: InterviewResult, index: number, open: boolean, onToggle: () => void }) => ( <div className="bg-white/60 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700"><h2><button type="button" className="flex items-center justify-between w-full p-5 font-medium text-left text-slate-800 dark:text-white" onClick={onToggle} aria-expanded={open}><span className="flex items-center"><span className="font-bold mr-3">Q{index + 1}:</span><span className="truncate pr-4">{result.question}</span></span><div className="flex items-center"><span className={`mr-4 font-bold ${result.score >= 4 ? 'text-green-500' : result.score === 3 ? 'text-yellow-500' : 'text-red-500'}`}>{result.score}/5</span><svg className={`w-3 h-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5 5 1 1 5"/></svg></div></button></h2><div className={`${open ? '' : 'hidden'}`}><div className="p-5 border-t border-slate-200 dark:border-slate-700"><p className="text-sm text-slate-500 dark:text-slate-400 italic p-3 bg-slate-100 dark:bg-slate-900 rounded-md mb-3">Your answer: "{result.answer}"</p><div className="p-3 bg-indigo-500/10 dark:bg-indigo-400/10 rounded-md"><p className="font-semibold text-indigo-800 dark:text-indigo-300">Feedback:</p><p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">{result.feedback}</p></div></div></div></div>);
-
-  const renderResultsView = () => { const totalScore = interviewResults.reduce((sum, result) => sum + result.score, 0); const maxScore = interviewResults.length * 5; const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0; const [openAccordion, setOpenAccordion] = useState<number | null>(null); const DonutChart = ({ percentage }: { percentage: number }) => { const strokeWidth = 12; const radius = 80; const normalizedRadius = radius - strokeWidth * 2; const circumference = normalizedRadius * 2 * Math.PI; const strokeDashoffset = circumference - (percentage / 100) * circumference; return (<div className="relative inline-flex items-center justify-center"><svg height={radius * 2} width={radius * 2}><circle stroke="currentColor" className="text-slate-200 dark:text-slate-700" strokeWidth={strokeWidth} fill="transparent" r={normalizedRadius} cx={radius} cy={radius} /><circle stroke="currentColor" className={`transition-all duration-1000 ease-out ${percentage >= 70 ? 'text-green-500' : percentage >= 40 ? 'text-yellow-500' : 'text-red-500'}`} strokeWidth={strokeWidth} strokeDasharray={circumference + ' ' + circumference} style={{ strokeDashoffset, strokeLinecap: 'round' }} fill="transparent" r={normalizedRadius} cx={radius} cy={radius} transform={`rotate(-90 ${radius} ${radius})`} /></svg><span className="absolute text-4xl font-extrabold">{percentage}%</span></div>);}; return (<div className="w-full max-w-5xl p-4 animate-fade-in-up"><h1 className="text-4xl font-bold text-center mb-8">Interview Performance</h1><div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8"><div className="lg:col-span-1 bg-white/60 dark:bg-slate-800/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center"><h2 className="text-xl font-bold mb-4">Overall Score</h2><DonutChart percentage={percentage} /><p className="text-2xl font-bold mt-4">{totalScore} / {maxScore}</p></div><div className="lg:col-span-2 bg-white/60 dark:bg-slate-800/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700"><h2 className="text-xl font-bold mb-4">AI Summary</h2><div className="space-y-4"><div className="flex items-start"><ThumbsUpIcon className="w-6 h-6 text-green-500 mr-3 mt-1 flex-shrink-0" /><div><h3 className="font-semibold text-slate-800 dark:text-white">Strengths</h3><p className="text-sm text-slate-600 dark:text-slate-300">{performanceSummary?.strengths}</p></div></div><div className="flex items-start"><LightbulbIcon className="w-6 h-6 text-yellow-500 mr-3 mt-1 flex-shrink-0" /><div><h3 className="font-semibold text-slate-800 dark:text-white">Areas for Improvement</h3><p className="text-sm text-slate-600 dark:text-slate-300">{performanceSummary?.areasForImprovement}</p></div></div></div></div></div><div className="bg-white/60 dark:bg-slate-800/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-8"><h2 className="text-xl font-bold mb-4">Score Breakdown</h2><div className="flex justify-between items-end space-x-2 h-40">{interviewResults.map((result, index) => (<div key={index} className="flex-1 flex flex-col items-center group"><div className={`w-full rounded-t-md transition-all duration-300 ${result.score >= 4 ? 'bg-green-500' : result.score === 3 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ height: `${result.score * 20}%` }}></div><span className="text-xs mt-2 font-semibold text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-white">Q{index + 1}</span></div>))}</div></div><div><h2 className="text-2xl font-bold text-center mb-6">Detailed Feedback</h2><div className="space-y-2">{interviewResults.map((result, index) => (<AccordionItem key={index} result={result} index={index} open={openAccordion === index} onToggle={() => setOpenAccordion(openAccordion === index ? null : index)} />))}</div></div><div className="text-center mt-12"><button onClick={onEndSession} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-lg">Back to Dashboard</button></div></div>);};
-  
   const renderInterviewContent = () => {
     switch(interviewState) {
         case 'generating':
@@ -292,7 +389,7 @@ const ResumeInterviewPage: React.FC<{
         case 'summarizing':
              return (<div className="text-center flex flex-col items-center"><Spinner /><p className="mt-4 text-xl text-slate-600 dark:text-slate-300">{interviewState === 'generating' ? 'Analyzing resume...' : interviewState === 'evaluating' ? 'Evaluating all answers...' : 'Generating performance summary...'}</p></div>);
         case 'inProgress': return renderInProgressView();
-        case 'results': return renderResultsView();
+        case 'results': return <ResultsView results={interviewResults} summary={performanceSummary} onEndSession={onEndSession} />;
         case 'upload':
         default: return renderUploadView();
     }

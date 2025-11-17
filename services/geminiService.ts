@@ -261,3 +261,50 @@ export const generateMcqTest = async (subject: TechnicalSubject): Promise<MCQ[]>
         }];
     }
 };
+
+export const summarizeMcqPerformance = async (subject: TechnicalSubject, score: number, total: number): Promise<{ strengths: string; areasForImprovement: string; }> => {
+    if (!isApiKeyConfigured()) {
+        await demoDelay(1000);
+        return {
+            strengths: `A score of ${score}/${total} indicates a good foundational knowledge in ${subject}. You seem comfortable with the core concepts.`,
+            areasForImprovement: `To deepen your understanding, focus on practical application and edge cases related to ${subject}. Consider reviewing advanced topics and recent developments in the field.`
+        };
+    }
+    
+    const ai = getAi();
+    if (!ai) return { strengths: "Could not connect to AI service.", areasForImprovement: "" };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `As a technical instructor, analyze the following MCQ test score.
+            
+            Subject: ${subject}
+            Score: ${score} out of ${total}
+
+            Based on this score, provide a high-level summary. Identify the candidate's likely strengths and suggest areas for improvement for this specific subject. Be encouraging and provide actionable advice.
+            `,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        strengths: { type: Type.STRING, description: "A paragraph summarizing the candidate's likely strengths in this subject." },
+                        areasForImprovement: { type: Type.STRING, description: "A paragraph identifying potential areas for improvement with actionable advice." }
+                    },
+                    required: ["strengths", "areasForImprovement"]
+                }
+            }
+        });
+
+        const jsonString = response.text.trim();
+        return JSON.parse(jsonString);
+
+    } catch (error) {
+        console.error(`Error summarizing MCQ performance:`, error);
+        return {
+            strengths: "An error occurred while generating the performance summary.",
+            areasForImprovement: "Review your answers to identify specific topics you need to work on."
+        };
+    }
+};
