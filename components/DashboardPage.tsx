@@ -4,11 +4,22 @@ import type { AppView } from '../types';
 interface DashboardPageProps {
   username: string;
   setView: (view: AppView) => void;
+  isApiKeyConfigured: boolean;
 }
 
-const DashboardPage: React.FC<DashboardPageProps> = ({ username, setView }) => {
+const ApiWarningBanner: React.FC = () => (
+    <div className="absolute top-20 left-1/2 -translate-x-1/2 w-full max-w-4xl p-4 bg-yellow-400/20 border border-yellow-500/30 rounded-lg text-center shadow-lg">
+        <p className="font-semibold text-yellow-800 dark:text-yellow-300">You are in Demo Mode.</p>
+        <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
+            To connect to the live AI, create a <code className="bg-yellow-200/50 dark:bg-yellow-800/50 px-1 py-0.5 rounded font-mono text-xs">.env</code> file in your project's root directory and add your Gemini API key: <code className="bg-yellow-200/50 dark:bg-yellow-800/50 px-1 py-0.5 rounded font-mono text-xs">API_KEY=your_key_here</code>, then restart the server.
+        </p>
+    </div>
+);
+
+const DashboardPage: React.FC<DashboardPageProps> = ({ username, setView, isApiKeyConfigured }) => {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4">
+      {!isApiKeyConfigured && <ApiWarningBanner />}
       <div className="text-center mb-12 animate-fade-in-up">
         <h1 className="text-4xl md:text-5xl font-bold text-slate-800 dark:text-white">Welcome, {username}!</h1>
         <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 mt-2">Choose your interview path.</p>

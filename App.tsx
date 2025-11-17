@@ -8,6 +8,7 @@ import DashboardPage from './components/DashboardPage';
 import ResumeInterviewPage from './components/ResumeInterviewPage';
 import McqTestPage from './components/McqTestPage';
 import { LogoutIcon, Spinner, SunIcon, MoonIcon } from './components/icons';
+import { isApiKeyConfigured } from './services/geminiService';
 
 type Theme = 'light' | 'dark';
 
@@ -38,6 +39,12 @@ const App: React.FC = () => {
   const [view, setView] = useState<AppView>(getInitialView);
   const [authLoading, setAuthLoading] = useState(true);
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
+  const [apiKeyStatus, setApiKeyStatus] = useState(false);
+
+  useEffect(() => {
+    // Check the API key status once on initial load.
+    setApiKeyStatus(isApiKeyConfigured());
+  }, []);
   
   useEffect(() => {
     const root = window.document.documentElement;
@@ -163,14 +170,14 @@ const App: React.FC = () => {
 
     switch (view) {
       case 'dashboard':
-        return <DashboardPage username={user.name} setView={handleSetView} />;
+        return <DashboardPage username={user.name} setView={handleSetView} isApiKeyConfigured={apiKeyStatus} />;
       case 'resume-interview':
         return <ResumeInterviewPage onEndSession={handleEndSession} />;
       case 'mcq-test':
         return <McqTestPage onEndSession={handleEndSession} />;
       default:
          // Fallback to dashboard if logged in with an unknown view
-         return <DashboardPage username={user.name} setView={handleSetView} />;
+         return <DashboardPage username={user.name} setView={handleSetView} isApiKeyConfigured={apiKeyStatus} />;
     }
   };
 
